@@ -13,8 +13,7 @@
              [driver :as driver]
              [util :as u]]
             [metabase.driver.generic-sql :as sql]
-            [metabase.util.honeysql-extensions :as hx]
-            [clj-time.core :as t]))
+            [metabase.util.honeysql-extensions :as hx]))
 
 (defn- connection-details->spec
   "Create a database specification for a SQLite3 database. DETAILS should include a
