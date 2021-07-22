@@ -14,7 +14,7 @@ import DateMonthYearWidget from "./widgets/DateMonthYearWidget";
 import DateQuarterYearWidget from "./widgets/DateQuarterYearWidget";
 import DateAllOptionsWidget from "./widgets/DateAllOptionsWidget";
 import TextWidget from "./widgets/TextWidget";
-import ParameterFieldWidget from "./widgets/ParameterFieldWidget";
+import ParameterFieldWidget from "./widgets/ParameterFieldWidget/ParameterFieldWidget";
 
 import { fetchField, fetchFieldValues } from "metabase/redux/metadata";
 import {
@@ -115,9 +115,16 @@ export default class ParameterValueWidget extends Component {
   }
 
   updateFieldValues(props) {
-    for (const id of getFieldIds(props.parameter)) {
-      props.fetchField(id);
-      props.fetchFieldValues(id);
+    // in a dashboard? the field values will be fetched via
+    // DashboardApi.parameterValues instead and thus, no need to
+    // manually update field values
+    const { dashboard } = props;
+    const useChainFilter = dashboard && dashboard.id;
+    if (!useChainFilter) {
+      for (const id of getFieldIds(props.parameter)) {
+        props.fetchField(id);
+        props.fetchFieldValues(id);
+      }
     }
   }
 

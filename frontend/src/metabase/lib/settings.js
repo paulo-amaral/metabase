@@ -121,6 +121,11 @@ class Settings {
     return this.get("anon-tracking-enabled") || false;
   }
 
+  formattingOptions() {
+    const opts = this.get("custom-formatting");
+    return opts && opts["type/Temporal"] ? opts["type/Temporal"] : {};
+  }
+
   versionInfoLastChecked() {
     const ts = this.get("version-info-last-checked");
     if (ts) {
@@ -150,6 +155,10 @@ class Settings {
       anchor = `#${anchor}`;
     }
     return `https://www.metabase.com/docs/${tag}/${page}${anchor}`;
+  }
+
+  storeUrl(path = "") {
+    return `https://store.metabase.com/${path}`;
   }
 
   newVersionAvailable() {

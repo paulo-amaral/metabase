@@ -18,7 +18,7 @@ import Table from "metabase/entities/tables";
 
 function getColorForIconWrapper(props) {
   if (props.item.collection_position) {
-    return color("warning");
+    return color("saturated-yellow");
   }
   switch (props.type) {
     case "collection":
@@ -91,7 +91,7 @@ function ItemIcon({ item, type }) {
       {type === "table" ? (
         <Icon name="database" />
       ) : (
-        <Icon name={item.getIcon()} size={20} />
+        <Icon {...item.getIcon()} size={20} />
       )}
     </IconWrapper>
   );
@@ -106,7 +106,7 @@ const CollectionLink = styled(Link)`
 
 function CollectionBadge({ collection }) {
   return (
-    <CollectionLink to={Urls.collection(collection.id)}>
+    <CollectionLink to={Urls.collection(collection)}>
       {collection.name}
     </CollectionLink>
   );
@@ -177,9 +177,7 @@ function InfoText({ result }) {
         <span>
           {jt`Table in ${(
             <span>
-              <Link to={Urls.browseDatabase({ id: result.database_id })}>
-                <Database.Name id={result.database_id} />{" "}
-              </Link>
+              <Database.Link id={result.database_id} />{" "}
               {result.table_schema && (
                 <Schema.ListLoader
                   query={{ dbId: result.database_id }}
@@ -228,7 +226,11 @@ function InfoText({ result }) {
 
 export default function SearchResult({ result, compact }) {
   return (
-    <ResultLink to={result.getUrl()} compact={compact}>
+    <ResultLink
+      to={result.getUrl()}
+      compact={compact}
+      data-testid="search-result-item"
+    >
       <Flex align="start">
         <ItemIcon item={result} type={result.model} />
         <Box>

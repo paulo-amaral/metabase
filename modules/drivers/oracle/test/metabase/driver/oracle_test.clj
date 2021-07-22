@@ -5,6 +5,7 @@
             [clojure.test :refer :all]
             [honeysql.core :as hsql]
             [metabase.driver :as driver]
+            [metabase.driver.oracle :as oracle]
             [metabase.driver.sql-jdbc.connection :as sql-jdbc.conn]
             [metabase.driver.sql-jdbc.sync :as sql-jdbc.sync]
             [metabase.driver.sql.query-processor :as sql.qp]
@@ -58,9 +59,14 @@
              :service-name            "MyCoolService"
              :sid                     "ORCL"
              :ssl                     true}]]]
-    (is (= expected-spec
-           (sql-jdbc.conn/connection-details->spec :oracle details))
-        message)))
+    (let [actual-spec (sql-jdbc.conn/connection-details->spec :oracle details)
+          prog-prop   (deref #'oracle/prog-name-property)]
+      (is (= (dissoc expected-spec prog-prop)
+             (dissoc actual-spec prog-prop))
+          message)
+      ;; check our truncated Oracle version of the version/UUID string
+      ;; in some test cases, the version info isn't set, to the string "null" is the value
+      (is (re-matches #"MB (?:null|v(?:.*)) [\-a-f0-9]*" (get actual-spec prog-prop))))))
 
 (deftest require-sid-or-service-name-test
   (testing "no SID and no Service Name should throw an exception"
@@ -217,22 +223,23 @@
                   :where  [:<= (hsql/raw "rownum") 100]})
                (#'sql.qp/mbql->honeysql
                 :oracle
-                (mt/mbql-query venues
-                  {:source-table $$venues
-                   :order-by     [[:asc $id]]
-                   :filter       [:=
-                                  &test_data_categories__via__cat.categories.name
-                                  [:value "BBQ" {:base_type :type/Text, :semantic_type :type/Name, :database_type "VARCHAR"}]]
-                   :fields       [$id $name $category_id $latitude $longitude $price]
-                   :limit        100
-                   :joins        [{:source-table $$categories
-                                   :alias        "test_data_categories__via__cat",
-                                   :strategy     :left-join
-                                   :condition    [:=
-                                                  $category_id
-                                                  &test_data_categories__via__cat.categories.id]
-                                   :fk-field-id  (mt/id :venues :category_id)
-                                   :fields       :none}]}))))))))
+                (qp/query->preprocessed
+                 (mt/mbql-query venues
+                   {:source-table $$venues
+                    :order-by     [[:asc $id]]
+                    :filter       [:=
+                                   &test_data_categories__via__cat.categories.name
+                                   [:value "BBQ" {:base_type :type/Text, :semantic_type :type/Name, :database_type "VARCHAR"}]]
+                    :fields       [$id $name $category_id $latitude $longitude $price]
+                    :limit        100
+                    :joins        [{:source-table $$categories
+                                    :alias        "test_data_categories__via__cat"
+                                    :strategy     :left-join
+                                    :condition    [:=
+                                                   $category_id
+                                                   &test_data_categories__via__cat.categories.id]
+                                    :fk-field-id  (mt/id :venues :category_id)
+                                    :fields       :none}]})))))))))
 
 (deftest oracle-connect-with-ssl-test
   (mt/test-driver :oracle
@@ -244,3 +251,11 @@
                                "Skipping %s because %s env var is not set"
                                "oracle-connect-with-ssl-test"
                                "MB_ORACLE_SSL_TEST_SSL")))))
+
+(deftest text-equals-empty-string-test
+  (mt/test-driver :oracle
+    (testing ":= with empty string should work correctly (#13158)"
+      (mt/dataset airports
+        (is (= [1M]
+               (mt/first-row
+                (mt/run-mbql-query airport {:aggregation [:count], :filter [:= $code ""]}))))))))

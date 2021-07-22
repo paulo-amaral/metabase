@@ -2,11 +2,14 @@
 
 import _ from "underscore";
 import { getIn } from "icepick";
-import { t } from "ttag";
 
 import { datasetContainsNoResults } from "metabase/lib/dataset";
 import { parseTimestamp } from "metabase/lib/time";
-import { NULL_DISPLAY_VALUE, NULL_NUMERIC_VALUE } from "metabase/lib/constants";
+import {
+  NULL_DISPLAY_VALUE,
+  NULL_NUMERIC_VALUE,
+  TOTAL_ORDINAL_VALUE,
+} from "metabase/lib/constants";
 
 import {
   computeTimeseriesDataInverval,
@@ -141,8 +144,12 @@ function getParseOptions({ settings, data }) {
   };
 }
 
+function canDisplayNull(settings) {
+  // histograms are converted to ordinal scales, so we need this ugly logic as a workaround
+  return !isOrdinal(settings) || isHistogram(settings);
+}
+
 export function getDatas({ settings, series }, warn) {
-  const isNotOrdinal = !isOrdinal(settings);
   return series.map(({ data }) => {
     const parseOptions = getParseOptions({ settings, data });
 
@@ -150,13 +157,15 @@ export function getDatas({ settings, series }, warn) {
 
     // non-ordinal dimensions can't display null values,
     // so we filter them out and display a warning
-    if (isNotOrdinal) {
+    if (canDisplayNull(settings)) {
       rows = data.rows.filter(([x]) => x !== null);
     } else if (parseOptions.isNumeric) {
-      rows = data.rows.map(([x, ...rest]) => [
-        replaceNullValuesForOrdinal(x),
-        ...rest,
-      ]);
+      rows = data.rows.map(row => {
+        const [x, ...rest] = row;
+        const newRow = [replaceNullValuesForOrdinal(x), ...rest];
+        newRow._origin = row._origin;
+        return newRow;
+      });
     }
 
     if (rows.length < data.rows.length) {
@@ -175,7 +184,6 @@ export function getDatas({ settings, series }, warn) {
 export function getXValues({ settings, series }) {
   // if _raw isn't set then we already have the raw series
   const { _raw: rawSeries = series } = series;
-  const isNotOrdinal = !isOrdinal(settings);
   const warn = () => {}; // no op since warning in handled by getDatas
   const uniqueValues = new Set();
   let isAscending = true;
@@ -189,7 +197,7 @@ export function getXValues({ settings, series }) {
     let lastValue;
     for (const row of data.rows) {
       // non ordinal dimensions can't display null values, so we exclude them from xValues
-      if (isNotOrdinal && row[columnIndex] === null) {
+      if (canDisplayNull(settings) && row[columnIndex] === null) {
         continue;
       }
       const value = parseXValue(row[columnIndex], parseOptions, warn);
@@ -341,10 +349,11 @@ export function xValueForWaterfallTotal({ settings, series }) {
     const lastXValue = xValues[xValues.length - 1];
     return lastXValue.clone().add(count, interval);
   } else if (isQuantitative(settings) || isHistogram(settings)) {
-    return xValues[xValues.length - 1] + xInterval;
+    const maxXValue = _.max(xValues);
+    return maxXValue + xInterval;
   }
 
-  return t`Total`;
+  return TOTAL_ORDINAL_VALUE;
 }
 
 /************************************************************ PROPERTIES ************************************************************/
@@ -358,6 +367,8 @@ export const isHistogram = settings =>
   settings["graph.x_axis.scale"] === "histogram";
 export const isOrdinal = settings =>
   settings["graph.x_axis.scale"] === "ordinal";
+export const isLine = settings => settings.display === "line";
+export const isArea = settings => settings.display === "area";
 
 // bar histograms have special tick formatting:
 // * aligned with beginning of bar to show bin boundaries

@@ -63,8 +63,8 @@ describe("metabase/lib/expressions/tokenizer", () => {
   });
 
   it("should catch unterminated string literals", () => {
-    expect(errors("'single")[0].message).toEqual("Unterminated quoted string");
-    expect(errors('"double')[0].message).toEqual("Unterminated quoted string");
+    expect(errors("'single")[0].message).toEqual("Missing closing quotes");
+    expect(errors('"double')[0].message).toEqual("Missing closing quotes");
   });
 
   it("should tokenize identifiers", () => {
@@ -78,12 +78,18 @@ describe("metabase/lib/expressions/tokenizer", () => {
   });
 
   it("should catch unterminated bracket", () => {
-    expect(errors("[T")[0].message).toEqual("Unterminated bracket identifier");
+    expect(errors("[T")[0].message).toEqual("Missing a closing bracket");
   });
 
   it("should catch new brackets within bracket identifiers", () => {
     expect(errors("[T[")[0].message).toEqual(
       "Bracket identifier in another bracket identifier",
+    );
+  });
+
+  it("should catch a dangling closing bracket", () => {
+    expect(errors("floor(Total]*1.25)")[0].message).toEqual(
+      "Missing an opening bracket for Total",
     );
   });
 

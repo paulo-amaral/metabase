@@ -217,7 +217,7 @@ export function tokenize(expression) {
     const type = TOKEN.String;
     const end = index;
     const terminated = quote === source[end - 1];
-    const error = terminated ? null : t`Unterminated quoted string`;
+    const error = terminated ? null : t`Missing closing quotes`;
     return { type, value, start, end, error };
   };
 
@@ -245,7 +245,7 @@ export function tokenize(expression) {
     const type = TOKEN.Identifier;
     const end = index;
     const terminated = source[end - 1] === "]";
-    const error = terminated ? null : t`Unterminated bracket identifier`;
+    const error = terminated ? null : t`Missing a closing bracket`;
     return { type, start, end, error };
   };
 
@@ -318,9 +318,22 @@ export function tokenize(expression) {
         if (!char) {
           break;
         }
-        const message = t`Invalid character: ${char}`;
         const pos = index;
-        errors.push({ message, pos });
+        if (char === "]") {
+          const prev = tokens[tokens.length - 1];
+          const ref =
+            prev && prev.type === TOKEN.Identifier
+              ? source.slice(prev.start, prev.end)
+              : null;
+          console.log({ prev, ref });
+          const message = ref
+            ? t`Missing an opening bracket for ${ref}`
+            : t`Missing an opening bracket`;
+          errors.push({ message, pos });
+        } else {
+          const message = t`Invalid character: ${char}`;
+          errors.push({ message, pos });
+        }
         ++index;
       }
     }

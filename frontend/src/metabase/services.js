@@ -212,7 +212,7 @@ export const LdapApi = {
 };
 
 export const MetabaseApi = {
-  db_list: GET("/api/database"),
+  db_list: GET("/api/database", res => res["data"]),
   db_create: POST("/api/database"),
   db_validate: POST("/api/database/validate"),
   db_add_sample_dataset: POST("/api/database/sample_dataset"),
@@ -407,9 +407,12 @@ export const UtilApi = {
   random_token: GET("/api/util/random_token"),
   logs: GET("/api/util/logs"),
   bug_report_details: GET("/api/util/bug_report_details"),
+  // this one does not need an HTTP verb because it's opened as an external link
+  connection_pool_details_url: "/api/util/diagnostic_info/connection_pool_info",
 };
 
 export const GeoJSONApi = {
+  load: GET("/api/geojson"),
   get: GET("/api/geojson/:id"),
 };
 

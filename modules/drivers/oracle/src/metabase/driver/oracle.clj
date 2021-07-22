@@ -5,6 +5,7 @@
             [honeysql.core :as hsql]
             [honeysql.format :as hformat]
             [java-time :as t]
+            [metabase.config :as config]
             [metabase.driver :as driver]
             [metabase.driver.common :as driver.common]
             [metabase.driver.sql :as sql]
@@ -12,6 +13,7 @@
             [metabase.driver.sql-jdbc.execute :as sql-jdbc.execute]
             [metabase.driver.sql-jdbc.sync :as sql-jdbc.sync]
             [metabase.driver.sql.query-processor :as sql.qp]
+            [metabase.driver.sql.query-processor.empty-string-is-null :as sql.qp.empty-string-is-null]
             [metabase.driver.sql.util :as sql.u]
             [metabase.driver.sql.util.unprepare :as unprepare]
             [metabase.util :as u]
@@ -25,7 +27,7 @@
            [oracle.jdbc OracleConnection OracleTypes]
            oracle.sql.TIMESTAMPTZ))
 
-(driver/register! :oracle, :parent :sql-jdbc)
+(driver/register! :oracle, :parent #{:sql-jdbc ::sql.qp.empty-string-is-null/empty-string-is-null})
 
 (def ^:private database-type->base-type
   (sql-jdbc.sync/pattern-based-database-type->base-type
@@ -80,15 +82,24 @@
                       (if sid (str "(SID=" sid ")") "")
                       (if service-name (str "(SERVICE_NAME=" service-name ")") ""))))
 
+(def ^:private ^:const prog-name-property
+  "The connection property used by the Oracle JDBC Thin Driver to control the program name."
+  "v$session.program")
+
 (defmethod sql-jdbc.conn/connection-details->spec :oracle
   [_ {:keys [host port sid service-name]
       :or   {host "localhost", port 1521}
       :as   details}]
   (assert (or sid service-name))
-  (let [spec      {:classname "oracle.jdbc.OracleDriver" :subprotocol "oracle:thin"}
-        finish-fn (if (:ssl details) ssl-spec non-ssl-spec)]
+  (let [spec      {:classname "oracle.jdbc.OracleDriver", :subprotocol "oracle:thin"}
+        finish-fn (if (:ssl details) ssl-spec non-ssl-spec)
+        ;; the v$session.program value has a max length of 48 (see T4Connection), so we have to make it more terse than
+        ;; the usual config/mb-version-and-process-identifier string and ensure we truncate to a length of 48
+        prog-nm   (as-> (format "MB %s %s" (config/mb-version-info :tag) config/local-process-uuid) s
+                    (subs s 0 (min 48 (count s))))]
     (-> (merge spec details)
         (dissoc :host :port :sid :service-name :ssl)
+        (assoc prog-name-property prog-nm)
         (finish-fn host port sid service-name))))
 
 (defmethod driver/can-connect? :oracle
@@ -217,12 +228,16 @@
         (num-to-ds-interval :second field-or-value)))
 
 (defmethod sql.qp/cast-temporal-string [:oracle :Coercion/ISO8601->DateTime]
-  [_driver _semantic_type expr]
+  [_driver _coercion-strategy expr]
   (hsql/call :to_timestamp expr "YYYY-MM-DD HH:mi:SS"))
 
 (defmethod sql.qp/cast-temporal-string [:oracle :Coercion/ISO8601->Date]
-  [_driver _semantic_type expr]
+  [_driver _coercion-strategy expr]
   (hsql/call :to_date expr "YYYY-MM-DD"))
+
+(defmethod sql.qp/cast-temporal-string [:oracle :Coercion/YYYYMMDDHHMMSSString->Temporal]
+  [_driver _coercion-strategy expr]
+  (hsql/call :to_timestamp expr "YYYYMMDDHH24miSS"))
 
 (defmethod sql.qp/unix-timestamp->honeysql [:oracle :milliseconds]
   [driver _ field-or-value]
